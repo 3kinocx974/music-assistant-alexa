@@ -1,0 +1,34 @@
+{
+    "interactionModel": {
+        "languageModel": {
+            "invocationName": "music assistant",
+            "intents": [
+                {
+                    "name": "PlayAudio",
+                    "slots": [],
+                    "samples": [
+                        "play",
+                        "démarre",
+                        "lance",
+                        "joue",
+                        "démarrer music assistant",
+                        "lancer music assistant",
+                        "jouer music assistant",
+                        "démarre la musique",
+                        "lance la musique",
+                        "joue de la musique"
+                    ]
+                },
+                { "name": "AMAZON.PauseIntent", "samples": [] },
+                { "name": "AMAZON.ResumeIntent", "samples": [] },
+                { "name": "AMAZON.HelpIntent", "samples": [] },
+                { "name": "AMAZON.StopIntent", "samples": [] },
+                { "name": "AMAZON.CancelIntent", "samples": [] },
+                { "name": "AMAZON.StartOverIntent", "samples": [] },
+                { "name": "AMAZON.FallbackIntent", "samples": [] },
+                { "name": "AMAZON.NavigateHomeIntent", "samples": [] }
+            ],
+            "types": []
+        }
+    }
+}

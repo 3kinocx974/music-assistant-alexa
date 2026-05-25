@@ -1,0 +1,36 @@
+# Automation Home Assistant
+# Relance la Skill Alexa "Music Assistant" quand Music Assistant change de piste.
+#
+# Remplacer :
+#   VOTRE_PLAYER_MUSIC_ASSISTANT  →  entity_id du player Music Assistant
+#                                    (trouvable dans Outils de développement → États,
+#                                     attribut app_id: music_assistant)
+#   VOTRE_ECHO                    →  suffixe du service notify Alexa Media Player
+#                                    (ex: chambre_music pour notify.alexa_media_chambre_music)
+
+alias: "MA → Alexa : changement de piste"
+description: "Relance la Skill quand Music Assistant change de piste"
+mode: single
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: media_player.VOTRE_PLAYER_MUSIC_ASSISTANT
+    attribute: media_title
+
+condition:
+  - condition: state
+    entity_id: media_player.VOTRE_PLAYER_MUSIC_ASSISTANT
+    state: playing
+  - condition: template
+    value_template: >
+      {{ trigger.to_state.attributes.get('app_id') == 'music_assistant' }}
+
+action:
+  - delay:
+      seconds: 3
+  - service: notify.alexa_media_VOTRE_ECHO
+    data:
+      message: "play music assistant"
+      data:
+        type: tts

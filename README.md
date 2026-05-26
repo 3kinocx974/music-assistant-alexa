@@ -1,39 +1,42 @@
-# Music Assistant → Alexa (sans Docker)
+# Music Assistant → Alexa (Docker-free)
 
-> Contrôler la lecture de [Music Assistant](https://music-assistant.io) sur des enceintes Amazon Echo, **sans Docker externe**, via un add-on Home Assistant et une fonction AWS Lambda gratuite.
+> Control [Music Assistant](https://music-assistant.io) playback on Amazon Echo devices, **without any Docker container**, using a Home Assistant add-on and a free AWS Lambda function.
 
-Basé sur le travail de [timlaing/music-assistant-alexa-api](https://github.com/timlaing/music-assistant-alexa-api) et [alams154/music-assistant-alexa-skill-prototype](https://github.com/alams154/music-assistant-alexa-skill-prototype).
+Based on the work of [timlaing/music-assistant-alexa-api](https://github.com/timlaing/music-assistant-alexa-api) and [alams154/music-assistant-alexa-skill-prototype](https://github.com/alams154/music-assistant-alexa-skill-prototype).
+
+> **⚠️ Important:** This guide uses a **modified fork** of the timlaing add-on that adds the `/alexa/intents` route, allowing Music Assistant to control playback (stop, pause, play, next, previous) on Echo devices. Use [3kinocx974/Alexa-api](https://github.com/3kinocx974/Alexa-api) instead of the original timlaing repository.
 
 ---
 
-## Sommaire
+## Table of Contents
 
 - [Architecture](#architecture)
-- [Prérequis](#prérequis)
-- [Étape 1 — Add-on Home Assistant](#étape-1--add-on-home-assistant)
-- [Étape 2 — Cloudflare tunnel](#étape-2--cloudflare-tunnel)
-- [Étape 3 — Music Assistant](#étape-3--music-assistant)
-- [Étape 4 — Skill Alexa](#étape-4--skill-alexa)
-- [Étape 5 — AWS Lambda](#étape-5--aws-lambda)
-- [Étape 6 — Finaliser la Skill](#étape-6--finaliser-la-skill)
-- [Étape 7 — Vérification](#étape-7--vérification)
-- [Étape 8 — Automation HA](#étape-8--automation-ha)
-- [Dépannage](#dépannage)
+- [Prerequisites](#prerequisites)
+- [Step 1 — Home Assistant Add-on (modified fork)](#step-1--home-assistant-add-on-modified-fork)
+- [Step 2 — Cloudflare Tunnel](#step-2--cloudflare-tunnel)
+- [Step 3 — Music Assistant](#step-3--music-assistant)
+- [Step 4 — Alexa Skill](#step-4--alexa-skill)
+- [Step 5 — AWS Lambda](#step-5--aws-lambda)
+- [Step 6 — Finalize the Skill](#step-6--finalize-the-skill)
+- [Step 7 — Verification](#step-7--verification)
+- [Step 8 — HA Automation](#step-8--ha-automation)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Architecture
 
 ```
-Commande vocale → Amazon Cloud → Skill Alexa (Developer Console)
+Voice command → Amazon Cloud → Alexa Skill (Developer Console)
                                          │
                                   AWS Lambda (eu-west-1)
-                              (handler Python / ASK SDK)
+                              (Python handler / ASK SDK)
                                          │
                               HTTPS (Cloudflare tunnel)
                                          │
-                     Add-on HA : timlaing/music-assistant-alexa-api
-                              (port 5000, GET /ma/latest-url)
+                  HA Add-on: 3kinocx974/Alexa-api (modified fork)
+                    (port 5000, /ma/push-url, /ma/latest-url,
+                               /alexa/intents)
                                          │
                              Music Assistant (port 8097)
                                          │
@@ -42,120 +45,126 @@ Commande vocale → Amazon Cloud → Skill Alexa (Developer Console)
                                   Echo Dot / Echo Show
 ```
 
-| Composant | Rôle |
+| Component | Role |
 |---|---|
-| **Add-on timlaing** | Reçoit l'URL du stream de Music Assistant (`POST /ma/push-url`) et la sert à la Lambda (`GET /ma/latest-url`) |
-| **AWS Lambda** | Reçoit les requêtes Alexa, interroge l'add-on, répond avec une directive `AudioPlayer.Play` |
-| **Cloudflare tunnel** | Expose l'add-on (port 5000) et Music Assistant (port 8097) en HTTPS public |
+| **Add-on (fork)** | Receives stream URL from Music Assistant (`POST /ma/push-url`), serves it to Lambda (`GET /ma/latest-url`), and receives playback commands (`POST /alexa/intents`) |
+| **AWS Lambda** | Receives Alexa requests, queries the add-on, responds with an `AudioPlayer.Play` directive |
+| **Cloudflare tunnel** | Exposes the add-on (port 5000) and Music Assistant (port 8097) over public HTTPS |
+
+### What's different from the original add-on
+
+The original timlaing add-on does not handle the `/alexa/intents` route that Music Assistant uses to send playback control commands (stop, pause, play, next, previous). This fork adds that route and connects it to the Home Assistant API to control Alexa `media_player` entities.
 
 ---
 
-## Prérequis
+## Prerequisites
 
-- Home Assistant OS opérationnel
-- [Music Assistant](https://music-assistant.io) installé dans HA
-- Un domaine connecté à Cloudflare avec tunnel actif
-- [Alexa Media Player](https://github.com/alandtse/alexa_media_player) (HACS) installé dans HA
-- Un compte [Amazon Developer](https://developer.amazon.com) (gratuit)
-- Un compte [AWS](https://aws.amazon.com) (gratuit — Lambda inclus dans le free tier)
+- Home Assistant OS up and running
+- [Music Assistant](https://music-assistant.io) installed in HA
+- A domain connected to Cloudflare with an active tunnel
+- [Alexa Media Player](https://github.com/alandtse/alexa_media_player) (HACS) installed in HA
+- A free [Amazon Developer](https://developer.amazon.com) account
+- A free [AWS](https://aws.amazon.com) account (Lambda is included in the free tier)
 
 ---
 
-## Étape 1 — Add-on Home Assistant
+## Step 1 — Home Assistant Add-on (modified fork)
 
-### 1.1 Ajouter le dépôt
+> Use the **modified fork** `3kinocx974/Alexa-api`, not the original timlaing repository.
 
-**Paramètres → Modules complémentaires → Boutique → ⋮ → Dépôts**
+### 1.1 Add the repository
+
+**Settings → Add-ons → Add-on Store → ⋮ → Repositories**
 
 ```
-https://github.com/timlaing/music-assistant-alexa-api
+https://github.com/3kinocx974/Alexa-api
 ```
 
-Rafraîchir la boutique → **Music Assistant Alexa API** → **Installer**.
+Refresh the store → **Music Assistant Alexa API** → **Install**.
 
-### 1.2 Configurer l'add-on
+### 1.2 Configure the add-on
 
-Dans l'onglet **Configuration** :
+In the **Configuration** tab:
 
 ```yaml
-ma_hostname: https://stream.mondomaine.com   # sous-domaine stream MA (créé étape 2)
-api_username: mon-utilisateur-api            # identifiant de votre choix
-api_password: mon-mot-de-passe-api           # laisser vide = généré automatiquement
+ma_hostname: https://stream.yourdomain.com   # stream subdomain (created in step 2)
+api_username: my-api-user                    # username of your choice
+api_password: my-fixed-password             # set a fixed password (do not leave empty)
 aws_default_region: eu-west-1
 ```
 
-> Si vous laissez `api_password` vide, récupérez le mot de passe généré dans l'onglet **Journal** après le premier démarrage.
+> **Important:** Do not leave `api_password` empty — the add-on would generate a new password on every restart, breaking the sync with Music Assistant.
 
-**Démarrer l'add-on.**
+**Start the add-on.**
 
 ---
 
-## Étape 2 — Cloudflare tunnel
+## Step 2 — Cloudflare Tunnel
 
-Dans **Cloudflare Zero Trust → Réseaux → Tunnels → votre tunnel → Routes des applications publiées**, créer **deux routes** :
+In **Cloudflare Zero Trust → Networks → Tunnels → your tunnel → Public Hostnames**, create **two routes**:
 
-| Sous-domaine | Service | Usage |
+| Subdomain | Service | Purpose |
 |---|---|---|
-| `alexa-api.mondomaine.com` | `http://IP_HA:5000` | Add-on (API Skill) |
-| `stream.mondomaine.com` | `http://IP_HA:8097` | Music Assistant (audio) |
+| `alexa-api.yourdomain.com` | `http://HA_IP:5000` | Add-on (Skill API) |
+| `stream.yourdomain.com` | `http://HA_IP:8097` | Music Assistant (audio stream) |
 
-> Remplacer `IP_HA` par l'IP locale de votre serveur Home Assistant.  
-> Laisser les enregistrements DNS en mode **Proxied** (nuage orange) — obligatoire pour les tunnels Cloudflare.
+> Replace `HA_IP` with the local IP address of your Home Assistant server.  
+> Keep DNS records in **Proxied** mode (orange cloud) — required for Cloudflare tunnels.
 
-### Règle WAF
+### WAF Rule
 
-Dans **Cloudflare → votre domaine → Sécurité → WAF → Règles personnalisées**, créer une règle :
+In **Cloudflare → your domain → Security → WAF → Custom Rules**, create a rule:
 
 ```
 (http.user_agent contains "Alexa") or
 (http.user_agent contains "AmazonAlexa") or
-(http.host eq "alexa-api.mondomaine.com")
+(http.host eq "alexa-api.yourdomain.com")
 ```
 
-**Action : Skip (Ignorer)**
+**Action: Skip**
 
 ---
 
-## Étape 3 — Music Assistant
+## Step 3 — Music Assistant
 
-### 3.1 Provider Alexa
+### 3.1 Alexa Player Provider
 
-**Music Assistant → Paramètres → Player Providers → + → Alexa**
+**Music Assistant → Settings → Player Providers → + → Alexa**
 
-| Champ | Valeur |
+| Field | Value |
 |---|---|
 | API URL | `http://homeassistant:5000` |
-| API Basic Auth Username | valeur de `api_username` (étape 1) |
-| API Basic Auth Password | valeur de `api_password` (étape 1) |
+| API Basic Auth Username | value of `api_username` (step 1) |
+| API Basic Auth Password | value of `api_password` (step 1) |
 
-Cliquer **Authenticate with Amazon** et compléter l'authentification OAuth.
+Click **Authenticate with Amazon** and complete the OAuth flow.
 
 ### 3.2 Published IP address
 
-**Music Assistant → Paramètres → Système → Flux → Published IP address**
+**Music Assistant → Settings → Core → Streams → Published IP address**
 
 ```
-stream.mondomaine.com
+stream.yourdomain.com
 ```
 
-> Sans `https://` — Music Assistant compose l'URL complète automatiquement.
+> Without `https://` — Music Assistant builds the full URL automatically.
 
 ---
 
-## Étape 4 — Skill Alexa
+## Step 4 — Alexa Skill
 
-Sur [developer.amazon.com/alexa/console/ask](https://developer.amazon.com/alexa/console/ask) → **Create Skill** :
+On [developer.amazon.com/alexa/console/ask](https://developer.amazon.com/alexa/console/ask) → **Create Skill**:
 
-| Champ | Valeur |
+| Field | Value |
 |---|---|
 | Skill name | `Music Assistant` |
-| Primary locale | `English (US)` ou `French (FR)` |
+| Primary locale | `English (US)` or `French (FR)` |
 | Type | Custom |
 | Hosting | Provision your own |
 
 ### 4.1 Invocation Name
 
-**Build → Invocation** :
+**Build → Invocation**:
 
 ```
 music assistant
@@ -163,65 +172,65 @@ music assistant
 
 ### 4.2 Interaction Model
 
-**Build → Interaction Model → JSON Editor** — coller le contenu de [`interaction_model_en.json`](interaction_model_en.json) (anglais) ou [`interaction_model_fr.json`](interaction_model_fr.json) (français).
+**Build → Interaction Model → JSON Editor** — paste the content of [`interaction_model_en.json`](interaction_model_en.json) (English) or [`interaction_model_fr.json`](interaction_model_fr.json) (French).
 
 ### 4.3 Interfaces
 
-**Build → Interfaces** — activer :
+**Build → Interfaces** — enable:
 
 - ✅ **Audio Player**
 - ✅ **Alexa Presentation Language (APL)**
 
 ### 4.4 Endpoint
 
-Laisser en attente — l'ARN Lambda sera ajouté à l'étape 6.
+Leave pending — the Lambda ARN will be added in step 6.
 
 ---
 
-## Étape 5 — AWS Lambda
+## Step 5 — AWS Lambda
 
-> ⚠️ La région **eu-west-1 (Irlande)** est obligatoire pour les Skills Alexa ciblant l'Europe. Les régions non supportées (ex : eu-west-3 Paris) empêchent le déclenchement de la Skill.
+> ⚠️ The **eu-west-1 (Ireland)** region is required for Alexa Skills targeting Europe. Unsupported regions (e.g. eu-west-3 Paris) will prevent the Skill from being triggered.
 
-### 5.1 Créer la fonction
+### 5.1 Create the function
 
-Sur [console.aws.amazon.com/lambda](https://console.aws.amazon.com/lambda) — sélectionner la région **Europe (Irlande) eu-west-1** :
+On [console.aws.amazon.com/lambda](https://console.aws.amazon.com/lambda) — select region **Europe (Ireland) eu-west-1**:
 
-- **Créer une fonction** → "Créer depuis zéro"
-- Nom : `music-assistant-alexa`
-- Runtime : **Python 3.12**
-- Architecture : x86_64
+- **Create function** → "Author from scratch"
+- Name: `music-assistant-alexa`
+- Runtime: **Python 3.12**
+- Architecture: x86_64
 
-### 5.2 Déployer le code
+### 5.2 Deploy the code
 
-Cloner ce dépôt, puis depuis le dossier `lambda/` :
+Clone this repository, then from the `lambda/` folder:
 
 ```bash
 pip install ask-sdk-core --target . --break-system-packages
 zip -r ../lambda.zip . -x "*.pyc" -x "*__pycache__*"
 ```
 
-Dans la console Lambda → **Code → Charger depuis → .zip** → uploader `lambda.zip`.
+In the Lambda console → **Code → Upload from → .zip** → upload `lambda.zip`.
 
-### 5.3 Variables d'environnement
+### 5.3 Environment variables
 
-**Configuration → Variables d'environnement** :
+**Configuration → Environment variables**:
 
-| Clé | Valeur |
+| Key | Value |
 |---|---|
-| `API_URL` | `https://alexa-api.mondomaine.com` |
-| `API_USERNAME` | valeur de `api_username` (étape 1) |
-| `API_PASSWORD` | valeur de `api_password` (étape 1) |
-| `STREAM_URL` | `https://stream.mondomaine.com` |
+| `API_URL` | `https://alexa-api.yourdomain.com` |
+| `API_USERNAME` | value of `api_username` (step 1) |
+| `API_PASSWORD` | value of `api_password` (step 1) |
+| `STREAM_URL` | `https://stream.yourdomain.com` |
 
-### 5.4 Trigger Alexa
+### 5.4 Alexa Trigger
 
-**Configuration → Déclencheurs → Ajouter un déclencheur → Alexa**
+**Configuration → Triggers → Add trigger → Alexa**
 
-Coller le **Skill ID** visible dans la Developer Console → **Build → Endpoint → "Your Skill ID"**.
+Paste the **Skill ID** visible in the Developer Console → **Build → Endpoint → "Your Skill ID"**.
 
-### 5.5 Récupérer l'ARN
+### 5.5 Copy the ARN
 
-En haut à droite de la page Lambda, copier l'ARN :
+Top right of the Lambda page, copy the ARN:
 
 ```
 arn:aws:lambda:eu-west-1:XXXXXXXXXXXX:function:music-assistant-alexa
@@ -229,90 +238,92 @@ arn:aws:lambda:eu-west-1:XXXXXXXXXXXX:function:music-assistant-alexa
 
 ---
 
-## Étape 6 — Finaliser la Skill
+## Step 6 — Finalize the Skill
 
-Dans la Developer Console → **Build → Endpoint** :
+In the Developer Console → **Build → Endpoint**:
 
-- Sélectionner **AWS Lambda ARN**
-- **Default Region** : coller l'ARN (étape 5.5)
-- **Europe and India** : coller le même ARN
+- Select **AWS Lambda ARN**
+- **Default Region**: paste the ARN (step 5.5)
+- **Europe and India**: paste the same ARN
 
-Cliquer **Save Endpoints** puis **Build Skill**.
+Click **Save Endpoints** then **Build Skill**.
 
-Dans l'onglet **Test** → passer le switch sur **Development**.
+In the **Test** tab → set the switch to **Development**.
 
 ---
 
-## Étape 7 — Vérification
+## Step 7 — Verification
 
-### Simulateur Alexa
+### Alexa Simulator
 
-Dans **Test → Alexa Simulator** → taper `music assistant`.
+In **Test → Alexa Simulator** → type `music assistant`.
 
-Le **JSON Output** doit contenir :
+The **JSON Output** should contain:
 
 ```json
 {
   "type": "AudioPlayer.Play",
   "audioItem": {
     "stream": {
-      "url": "https://stream.mondomaine.com/single/..."
+      "url": "https://stream.yourdomain.com/single/..."
     }
   }
 }
 ```
 
-### Test vocal
+### Voice test
 
-Lancer une lecture dans Music Assistant sur un Echo, puis dire :
+Start playback in Music Assistant on an Echo device, then say:
 
-> **"Alexa, ouvre Music Assistant"**
+> **"Alexa, open Music Assistant"**
 
-L'Echo doit jouer le stream en cours.
-
----
-
-## Étape 8 — Automation HA
-
-Cette automation relance automatiquement la Skill sur l'Echo quand Music Assistant change de piste ou de station.
-
-> **Prérequis :** [Alexa Media Player](https://github.com/alandtse/alexa_media_player) installé dans HA.
-
-**Comment trouver les bons `entity_id` :**
-- Player Music Assistant : **Outils de développement → États** → entité avec `app_id: music_assistant` et `mass_player_type: player`
-- Echo Alexa Media Player : **Paramètres → Appareils et services → Alexa Media Player → Entités**
-
-Voir le fichier [`automation_ha.yaml`](automation_ha.yaml) — remplacer :
-- `VOTRE_PLAYER_MUSIC_ASSISTANT` → entity_id du player Music Assistant (ex : `media_player.salon`)
-- `VOTRE_ECHO` → suffixe du service notify (ex : `salon` pour `notify.alexa_media_salon`)
+The Echo should start playing the current stream. Stop/pause/play commands from the Music Assistant interface should also work on the Echo.
 
 ---
 
-## Récapitulatif des URLs
+## Step 8 — HA Automation
 
-| Usage | URL |
+This automation automatically re-launches the Skill on the Echo when Music Assistant changes track or station.
+
+> **Prerequisite:** [Alexa Media Player](https://github.com/alandtse/alexa_media_player) installed in HA.
+
+**How to find the right `entity_id` values:**
+- Music Assistant player: **Developer Tools → States** → entity with `app_id: music_assistant` and `mass_player_type: player`
+- Alexa Media Player Echo: **Settings → Devices & Services → Alexa Media Player → Entities**
+
+See [`automation_ha.yaml`](automation_ha.yaml) — replace:
+- `YOUR_MUSIC_ASSISTANT_PLAYER` → Music Assistant player entity_id (e.g. `media_player.living_room`)
+- `YOUR_ECHO` → notify service suffix (e.g. `living_room` for `notify.alexa_media_living_room`)
+
+---
+
+## URL Summary
+
+| Purpose | URL |
 |---|---|
-| Add-on API — accès public (Lambda → add-on) | `https://alexa-api.mondomaine.com` |
-| Add-on API — accès local (Music Assistant → add-on) | `http://homeassistant:5000` |
-| Stream audio — accès public (Alexa → stream) | `https://stream.mondomaine.com` |
+| Add-on API — public access (Lambda → add-on) | `https://alexa-api.yourdomain.com` |
+| Add-on API — local access (Music Assistant → add-on) | `http://homeassistant:5000` |
+| Audio stream — public access (Alexa → stream) | `https://stream.yourdomain.com` |
 
 ---
 
-## Dépannage
+## Troubleshooting
 
-| Symptôme | Cause probable | Solution |
+| Symptom | Likely cause | Solution |
 |---|---|---|
-| `Unable to reach the requested skill` | Lambda dans la mauvaise région AWS | Recréer la Lambda en `eu-west-1` |
-| JSON Output vide dans le simulateur | Endpoint non sauvegardé | Save Endpoints → Build Skill |
-| Stream URL en `http://IP:8097` | Published IP address mal configuré | Mettre `stream.mondomaine.com` sans `https://` |
-| `502 Bad Gateway` | Cloudflare ne joint pas le port 5000 | Vérifier l'IP dans la route Cloudflare |
-| `401 Unauthorized` sur l'add-on | Mauvais identifiants | Vérifier `API_USERNAME` / `API_PASSWORD` |
-| Aucun Echo détecté dans MA | Authentification Amazon non effectuée | Cliquer "Authenticate with Amazon" dans MA |
-| Skill répond mais ne joue rien | Pas de stream actif dans MA | Lancer une lecture dans MA d'abord |
-| `Access denied` depuis Cloudflare | Règle WAF manquante | Créer la règle WAF (étape 2) |
+| `Unable to reach the requested skill` | Lambda in wrong AWS region | Recreate Lambda in `eu-west-1` |
+| Empty JSON Output in simulator | Endpoint not saved | Save Endpoints → Build Skill |
+| Stream URL shows `http://IP:8097` | Published IP address misconfigured | Set `stream.yourdomain.com` without `https://` |
+| `502 Bad Gateway` | Cloudflare can't reach port 5000 | Check the IP in the Cloudflare route |
+| `401 Unauthorized` on add-on | Wrong credentials | Check `API_USERNAME` / `API_PASSWORD` |
+| No Echo devices detected in MA | Amazon authentication not completed | Click "Authenticate with Amazon" in MA |
+| Skill responds but no audio plays | No active stream in MA | Start playback in MA first |
+| `Access denied` from Cloudflare | Missing WAF rule | Create the WAF rule (step 2) |
+| Stop/pause not working | Using original add-on or wrong password | Use fork `3kinocx974/Alexa-api` with a fixed password |
+| Password changes on every restart | `api_password` left empty in config | Set a fixed password in the add-on configuration |
 
 ---
 
-## Licence
+## License
 
-MIT — contributions bienvenues.
+MIT — contributions welcome.

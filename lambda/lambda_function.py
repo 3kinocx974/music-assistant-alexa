@@ -2,11 +2,13 @@
 Music Assistant Alexa Skill — AWS Lambda Handler
 Python 3.12 | ask-sdk-core
 
-Variables d'environnement requises :
-  API_URL       : URL publique de l'add-on  (ex: https://alexa-api.mondomaine.com)
-  API_USERNAME  : identifiant Basic Auth     (configuré dans l'add-on HA)
-  API_PASSWORD  : mot de passe Basic Auth    (configuré dans l'add-on HA)
-  STREAM_URL    : URL publique du stream MA  (ex: https://stream.mondomaine.com)
+Required environment variables:
+  API_URL          : Public add-on URL       (e.g. https://alexa-api.yourdomain.com)
+  API_USERNAME     : Basic Auth username     (configured in the HA add-on)
+  API_PASSWORD     : Basic Auth password     (configured in the HA add-on)
+  STREAM_URL       : Public stream URL       (e.g. https://stream.yourdomain.com)
+  HA_WEBHOOK_URL   : HA webhook URL to notify playback state changes (optional)
+                     (e.g. https://yourdomain.com/api/webhook/your-webhook-id)
 """
 
 import os
@@ -38,16 +40,17 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-API_URL      = os.environ.get("API_URL", "https://alexa-api.mondomaine.com")
-API_USERNAME = os.environ.get("API_USERNAME", "")
-API_PASSWORD = os.environ.get("API_PASSWORD", "")
-STREAM_URL   = os.environ.get("STREAM_URL", "https://stream.mondomaine.com")
+API_URL        = os.environ.get("API_URL", "https://alexa-api.yourdomain.com")
+API_USERNAME   = os.environ.get("API_USERNAME", "")
+API_PASSWORD   = os.environ.get("API_PASSWORD", "")
+STREAM_URL     = os.environ.get("STREAM_URL", "https://stream.yourdomain.com")
+HA_WEBHOOK_URL = os.environ.get("HA_WEBHOOK_URL", "")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def rewrite_url(url: str) -> str:
-    """Réécrit les URLs de stream internes (http://IP:PORT) en URL publique HTTPS."""
+    """Rewrite internal stream URLs (http://IP:PORT) to public HTTPS URL."""
     if not url:
         return url
     rewritten = re.sub(r"http://[^/]+:\d+", STREAM_URL, url)
@@ -56,7 +59,7 @@ def rewrite_url(url: str) -> str:
 
 
 def get_latest_stream() -> dict | None:
-    """Interroge l'add-on timlaing pour obtenir le stream en cours."""
+    """Query the HA add-on for the current stream metadata."""
     url = f"{API_URL.rstrip('/')}/ma/latest-url"
     credentials = base64.b64encode(
         f"{API_USERNAME}:{API_PASSWORD}".encode()
@@ -80,16 +83,44 @@ def get_latest_stream() -> dict | None:
     return None
 
 
+def notify_ha_playback(stream_data: dict) -> None:
+    """Notify Home Assistant that playback has started on Alexa.
+    
+    Sends a POST request to HA_WEBHOOK_URL with the current stream metadata.
+    HA can use this to update the Music Assistant player state in real time.
+    """
+    if not HA_WEBHOOK_URL:
+        return
+    try:
+        payload = {
+            "title":     stream_data.get("title", ""),
+            "artist":    stream_data.get("artist", ""),
+            "album":     stream_data.get("album", ""),
+            "imageUrl":  stream_data.get("imageUrl", ""),
+            "streamUrl": stream_data.get("streamUrl", ""),
+        }
+        req = urllib.request.Request(
+            HA_WEBHOOK_URL,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            logger.info("HA notified of playback: %s (status %s)", payload["title"], resp.status)
+    except Exception as e:
+        logger.error("Failed to notify HA: %s", e)
+
+
 def build_play_response(handler_input: HandlerInput) -> Response:
-    """Construit la réponse AudioPlayer à partir du stream courant."""
+    """Build the AudioPlayer response from the current stream."""
     stream_data = get_latest_stream()
 
     if not stream_data or not stream_data.get("streamUrl"):
         return (
             handler_input.response_builder
             .speak(
-                "Aucun stream disponible. "
-                "Lance une lecture depuis Music Assistant d'abord."
+                "No stream available. "
+                "Please start playback from Music Assistant first."
             )
             .response
         )
@@ -98,7 +129,7 @@ def build_play_response(handler_input: HandlerInput) -> Response:
 
     return (
         handler_input.response_builder
-        .speak(f"Lecture de {stream_data.get('title', 'Music Assistant')}")
+        .speak(f"Playing {stream_data.get('title', 'Music Assistant')}")
         .add_directive(
             PlayDirective(
                 play_behavior=PlayBehavior.REPLACE_ALL,
@@ -122,7 +153,7 @@ def build_play_response(handler_input: HandlerInput) -> Response:
 # ── Request Handlers ──────────────────────────────────────────────────────────
 
 class LaunchRequestHandler(AbstractRequestHandler):
-    """Ouverture de la Skill → démarre la lecture."""
+    """Skill opened → start playback."""
 
     def can_handle(self, handler_input):
         return ask_utils.is_request_type("LaunchRequest")(handler_input)
@@ -133,7 +164,7 @@ class LaunchRequestHandler(AbstractRequestHandler):
 
 
 class PlayAudioIntentHandler(AbstractRequestHandler):
-    """Intent PlayAudio explicite."""
+    """Explicit PlayAudio intent."""
 
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("PlayAudio")(handler_input)
@@ -143,7 +174,7 @@ class PlayAudioIntentHandler(AbstractRequestHandler):
 
 
 class PauseIntentHandler(AbstractRequestHandler):
-    """Pause / Stop / Cancel → arrête la lecture."""
+    """Pause / Stop / Cancel → stop playback."""
 
     def can_handle(self, handler_input):
         return any([
@@ -157,7 +188,7 @@ class PauseIntentHandler(AbstractRequestHandler):
 
 
 class ResumeIntentHandler(AbstractRequestHandler):
-    """Resume → relance le stream courant."""
+    """Resume → restart current stream."""
 
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("AMAZON.ResumeIntent")(handler_input)
@@ -167,7 +198,7 @@ class ResumeIntentHandler(AbstractRequestHandler):
 
 
 class AudioPlayerEventHandler(AbstractRequestHandler):
-    """Gère tous les événements AudioPlayer."""
+    """Handle all AudioPlayer events."""
 
     _EVENTS = [
         "AudioPlayer.PlaybackStarted",
@@ -186,7 +217,13 @@ class AudioPlayerEventHandler(AbstractRequestHandler):
         event = handler_input.request_envelope.request.object_type
         logger.info("AudioPlayer event: %s", event)
 
-        # Ré-enqueue le stream quand il est presque terminé (flux continu)
+        # Notify HA immediately when playback starts → reduces display latency
+        if event == "AudioPlayer.PlaybackStarted":
+            stream_data = get_latest_stream()
+            if stream_data:
+                notify_ha_playback(stream_data)
+
+        # Re-enqueue the stream when nearly finished (continuous playback)
         if event == "AudioPlayer.PlaybackNearlyFinished":
             stream_data = get_latest_stream()
             if stream_data and stream_data.get("streamUrl"):
@@ -219,8 +256,8 @@ class HelpIntentHandler(AbstractRequestHandler):
         return (
             handler_input.response_builder
             .speak(
-                "Dis simplement 'Alexa, ouvre Music Assistant' "
-                "pour lancer la lecture en cours."
+                "Just say 'Alexa, open Music Assistant' "
+                "to start playing the current stream."
             )
             .response
         )
@@ -233,7 +270,7 @@ class FallbackIntentHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         return (
             handler_input.response_builder
-            .speak("Dis 'ouvre Music Assistant' pour lancer la lecture.")
+            .speak("Say 'open Music Assistant' to start playback.")
             .response
         )
 
@@ -256,8 +293,8 @@ class CatchAllExceptionHandler(AbstractExceptionHandler):
         return (
             handler_input.response_builder
             .speak(
-                "Une erreur s'est produite. "
-                "Vérifiez que Music Assistant est en cours de lecture."
+                "An error occurred. "
+                "Please make sure Music Assistant is playing something."
             )
             .response
         )

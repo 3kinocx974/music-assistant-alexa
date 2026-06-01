@@ -1,0 +1,259 @@
+api_keys:
+  anthropic: "${ANTHROPIC_API_KEY}"
+  openai: "${OPENAI_API_KEY}"
+  runway: "${RUNWAY_API_KEY}"
+  elevenlabs: "${ELEVENLABS_API_KEY}"
+  youtube:
+    client_id: "${YOUTUBE_CLIENT_ID}"
+    client_secret: "${YOUTUBE_CLIENT_SECRET}"
+    token_file: "token_youtube.json"
+  tiktok:
+    client_key: "${TIKTOK_CLIENT_KEY}"
+    client_secret: "${TIKTOK_CLIENT_SECRET}"
+  instagram:
+    access_token: "${INSTAGRAM_ACCESS_TOKEN}"
+    user_id: "${INSTAGRAM_USER_ID}"
+  facebook:
+    page_access_token: "${FACEBOOK_PAGE_ACCESS_TOKEN}"
+    page_id: "${FACEBOOK_PAGE_ID}"
+  twitter:
+    api_key: "${TWITTER_API_KEY}"
+    api_secret: "${TWITTER_API_SECRET}"
+    access_token: "${TWITTER_ACCESS_TOKEN}"
+    access_token_secret: "${TWITTER_ACCESS_TOKEN_SECRET}"
+
+video:
+  duration_seconds: 90
+  fps: 24
+  resolution:
+    - 1920
+    - 1080
+  scenes_count: 15
+  scene_duration_seconds: 6
+  crossfade_duration: 0.5
+  background_music_volume: 0.20
+  narration_volume: 1.0
+  background_music_file: null
+  image_backend: "openai"  # "openai" or "stability_ai"
+  tts_backend: "elevenlabs"  # "elevenlabs" or "gtts"
+  video_codec: "libx264"
+  audio_codec: "aac"
+  ken_burns_scale: 1.10
+  ken_burns_speed: 0.005
+
+styles:
+  japanese_anime:
+    label: "Japanese Anime"
+    keywords:
+      - "Studio Ghibli style"
+      - "Makoto Shinkai aesthetic"
+      - "painterly backgrounds"
+      - "cel-shading"
+      - "vibrant saturated colors"
+      - "expressive character art"
+      - "soft luminous lighting"
+      - "atmospheric perspective"
+      - "detailed environment"
+      - "hand-drawn feel"
+    color_palette:
+      primary:
+        - "#7BC8F6"
+        - "#F5A623"
+        - "#4A90D9"
+        - "#7ED321"
+        - "#D0021B"
+      secondary:
+        - "#F8F8F0"
+        - "#2C3E50"
+        - "#E8DCC8"
+        - "#8B4513"
+        - "#228B22"
+    composition_rules:
+      - "rule of thirds"
+      - "leading lines toward focal point"
+      - "layered depth with foreground mid-ground background"
+      - "dramatic sky occupying upper third"
+      - "silhouette contrast"
+      - "golden hour warm light"
+    negative_prompt_extras:
+      - "photo"
+      - "realistic"
+      - "3d render"
+      - "watermark"
+      - "text"
+      - "western cartoon"
+      - "anime chibi"
+      - "low quality"
+      - "blurry"
+
+  ecole_belge:
+    label: "École Belge (Franco-Belgian Comic)"
+    keywords:
+      - "ligne claire style"
+      - "Hergé inspired"
+      - "Moebius aesthetic"
+      - "clean precise lines"
+      - "flat bold colors"
+      - "Franco-Belgian comic art"
+      - "clear contour lines"
+      - "no hatching"
+      - "uniform line weight"
+      - "cartographic precision"
+      - "Tintin visual style"
+    color_palette:
+      primary:
+        - "#E8C547"
+        - "#3A7BD5"
+        - "#E74C3C"
+        - "#2ECC71"
+        - "#F39C12"
+      secondary:
+        - "#FEFEFE"
+        - "#2C3E50"
+        - "#BDC3C7"
+        - "#8E44AD"
+        - "#16A085"
+    composition_rules:
+      - "clear foreground separation"
+      - "detailed architectural backgrounds"
+      - "balanced symmetrical framing"
+      - "sequential narrative clarity"
+      - "expressive simplified faces"
+      - "consistent lighting from single source"
+    negative_prompt_extras:
+      - "photo"
+      - "realistic"
+      - "3d render"
+      - "watermark"
+      - "text"
+      - "painted texture"
+      - "japanese anime"
+      - "sketch"
+      - "rough"
+      - "low quality"
+
+publishing:
+  enabled_platforms:
+    - youtube
+    - tiktok
+    - instagram
+    - facebook
+    - twitter
+
+  youtube:
+    enabled: true
+    max_duration_seconds: 3600
+    category_id: "27"  # Education
+    privacy_status: "public"
+    default_language: "fr"
+    made_for_kids: false
+    hashtags:
+      - "littératurefrançaise"
+      - "poésie"
+      - "classiquefrançais"
+      - "culture"
+      - "art"
+      - "animation"
+    description_template: |
+      {title}
+
+      {text_excerpt}
+
+      🎨 Style: {style_label}
+      ✍️ Auteur: {author}
+
+      Découvrez la beauté de la littérature classique française mise en images.
+
+      {hashtags}
+    tags_template:
+      - "littérature française"
+      - "poésie française"
+      - "classique français"
+      - "{author}"
+      - "animation"
+      - "art numérique"
+      - "{style}"
+
+  tiktok:
+    enabled: true
+    max_duration_seconds: 180
+    privacy_level: "PUBLIC_TO_EVERYONE"
+    disable_duet: false
+    disable_comment: false
+    disable_stitch: false
+    hashtags:
+      - "litteraturefrancaise"
+      - "poesie"
+      - "culturefr"
+      - "apprendreensemble"
+      - "artvisuel"
+      - "anime"
+      - "animation"
+    caption_template: "{title} par {author} ✨ {hashtags}"
+
+  instagram:
+    enabled: true
+    max_duration_seconds: 90
+    media_type: "REELS"
+    hashtags:
+      - "litteraturefrancaise"
+      - "poesie"
+      - "classiquefrancais"
+      - "culture"
+      - "artvisuel"
+      - "animation"
+      - "reels"
+      - "france"
+    caption_template: |
+      {title} ✨
+
+      {text_excerpt}
+
+      Style: {style_label} 🎨
+      Auteur: {author} ✍️
+
+      {hashtags}
+
+  facebook:
+    enabled: true
+    max_duration_seconds: 3600
+    hashtags:
+      - "litteraturefrancaise"
+      - "poesie"
+      - "classiquefrancais"
+      - "culture"
+      - "artvisuel"
+    description_template: |
+      📚 {title}
+
+      {text_excerpt}
+
+      🎨 Style artistique: {style_label}
+      ✍️ Auteur: {author}
+
+      {hashtags}
+
+  twitter:
+    enabled: true
+    max_duration_seconds: 140
+    max_file_size_mb: 512
+    hashtags:
+      - "Poésie"
+      - "LittératureFrançaise"
+      - "Culture"
+      - "Art"
+    tweet_template: "🎭 {title} par {author}\n\n{text_excerpt_short}\n\n{hashtags}"
+    max_tweet_length: 280
+
+paths:
+  input_dir: "input"
+  output_dir: "output"
+  temp_dir: "temp"
+  assets_dir: "assets"
+  music_dir: "assets/music"
+  fonts_dir: "assets/fonts"
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "pipeline.log"
